@@ -1,0 +1,188 @@
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
+from pathlib import Path
+# Load data
+df = pd.read_csv("employee.csv")
+df.columns = df.columns.str.strip().str.lower()
+# Output folder
+output_dir = Path("reports/figures")
+output_dir.mkdir(parents=True, exist_ok=True)
+# Consistent style and colours
+sns.set_theme(style="whitegrid", palette="deep")
+COLORS = ["#2563EB", "#0D9488", "#F59E0B", "#9333EA", "#E11D48"]
+# Identify columns
+numeric_cols = df.select_dtypes(include="number").columns.tolist()
+categorical_cols = df.select_dtypes(
+    include=["object", "string", "category"]
+).columns.tolist()
+if not numeric_cols:
+    raise ValueError("The dataset must contain at least one numeric column.")
+# Prefer common employee-data columns when available
+salary_col = "salary" if "salary" in df.columns else numeric_cols[0]
+department_col = (
+    "department" if "department" in df.columns
+    else categorical_cols[0] if categorical_cols
+    else None
+)
+def save_chart(fig, filename, insight):
+    """Add the insight, save the figure, and display it."""
+    fig.tight_layout(rect=[0, 0.08, 1, 1])
+    fig.savefig(output_dir / filename, dpi=300, bbox_inches="tight")
+    plt.show()
+    print(f"Insight: {insight}")
+# CHART 1: BAR CHART
+print("1. Bar Chart — Average Salary by Department")
+fig, ax = plt.subplots(figsize=(9, 5))
+if department_col:
+    bar_data = (
+        df.groupby(department_col, dropna=False)[salary_col]
+        .mean()
+        .sort_values(ascending=False)
+    )
+    sns.barplot(
+        x=bar_data.index.astype(str),
+        y=bar_data.values,
+        hue=bar_data.index.astype(str),
+        palette=COLORS,
+        legend=False,
+        ax=ax
+    )
+    ax.set_xlabel(department_col.replace("_", " ").title())
+    ax.set_ylabel(f"Average {salary_col.title()} (dataset units)")
+    ax.set_title(f"Average {salary_col.title()} by {department_col.title()}")
+    if not bar_data.empty:
+        insight = (
+            f"{bar_data.idxmax()} has the highest average "
+            f"{salary_col}: {bar_data.max():,.2f} "
+            f"(dataset units)."
+        )
+    else:
+        insight = "No valid group data is available."
+else:
+    counts = df[salary_col].value_counts().head(10)
+    ax.bar(counts.index.astype(str), counts.values, color=COLORS[0])
+    ax.set_xlabel(f"{salary_col.title()} (dataset units)")
+    ax.set_ylabel("Employee records (count)")
+    ax.set_title(f"Most Common {salary_col.title()} Values")
+    insight = "The chart shows the frequency of the most common values."
+save_chart(fig, "01_bar_chart.png", insight)
+# CHART 2: HISTOGRAM
+print(f"## 2. Histogram — Distribution of {salary_col.title()}")
+fig, ax = plt.subplots(figsize=(9, 5))
+values = df[salary_col].dropna()
+sns.histplot(values, bins=15, color=COLORS[0], edgecolor="white", ax=ax)
+ax.set_title(f"Distribution of {salary_col.title()}")
+ax.set_xlabel(f"{salary_col.title()} (dataset units)")
+ax.set_ylabel("Number of employees (count)")
+if not values.empty:
+    insight = (
+        f"The average {salary_col} is {values.mean():,.2f} "
+        f"and the median is {values.median():,.2f} "
+        f"(dataset units). Compare these values to assess skew."
+    )
+else:
+    insight = "No valid numeric values are available."
+save_chart(fig, "02_histogram.png", insight)
+# CHART 3: SCATTER PLOT
+print("## 3. Scatter Plot — Relationship Between Two Numeric Variables")
+if len(numeric_cols) >= 2:
+    x_col = "age" if "age" in numeric_cols else numeric_cols[0]
+    y_col = (
+        "salary" if "salary" in numeric_cols and "salary" != x_col
+        else next(c for c in numeric_cols if c != x_col)
+    )
+    plot_df = df[[x_col, y_col] +
+                 ([department_col] if department_col else [])].dropna()
+    fig, ax = plt.subplots(figsize=(9, 5))
+    if department_col:
+        sns.scatterplot(
+            data=plot_df, x=x_col, y=y_col,
+            hue=department_col, palette=COLORS, ax=ax
+        )
+    else:
+        sns.scatterplot(
+            data=plot_df, x=x_col, y=y_col,
+            color=COLORS[0], ax=ax
+        )
+    ax.set_title(f"{y_col.title()} vs {x_col.title()}")
+    ax.set_xlabel(f"{x_col.title()} (units as recorded)")
+    ax.set_ylabel(f"{y_col.title()} (units as recorded)")
+    correlation = plot_df[x_col].corr(plot_df[y_col])
+    insight = (
+        f"The correlation between {x_col} and {y_col} is "
+        f"{correlation:.2f}. This indicates the direction and "
+        f"strength of their linear association, not causation."
+    )
+else:
+    fig, ax = plt.subplots(figsize=(9, 5))
+    ax.text(0.5, 0.5, "Two numeric columns are required",
+            ha="center", va="center")
+    ax.set_axis_off()
+    insight = "Add a second numeric column to analyze relationships."
+save_chart(fig, "03_scatter_plot.png", insight)
+# CHART 4: LINE CHART (SORTED VALUES)
+print("## 4. Line Chart — Sorted Values")
+sorted_values = df[salary_col].dropna().sort_values().reset_index(drop=True)
+fig, ax = plt.subplots(figsize=(9, 5))
+ax.plot(
+    sorted_values.index + 1,
+    sorted_values.values,
+    color=COLORS[1],
+    linewidth=2,
+    label=f"Sorted {salary_col}"
+)
+ax.set_title(f"Sorted {salary_col.title()} Values")
+ax.set_xlabel("Employee record rank (sorted)")
+ax.set_ylabel(f"{salary_col.title()} (dataset units)")
+ax.legend()
+if not sorted_values.empty:
+    insight = (
+        f"Sorted {salary_col} values range from "
+        f"{sorted_values.min():,.2f} to "
+        f"{sorted_values.max():,.2f} (dataset units). "
+        "This shows the spread, not a time trend."
+    )
+else:
+    insight = "No valid numeric values are available."
+save_chart(fig, "04_line_chart.png", insight)
+# CHART 5: CORRELATION HEATMAP
+print("## 5. Heatmap — Numeric Correlations")
+fig, ax = plt.subplots(figsize=(9, 6))
+if len(numeric_cols) >= 2:
+    corr = df[numeric_cols].corr()
+    sns.heatmap(
+        corr,
+        annot=True,
+        cmap="coolwarm",
+        vmin=-1,
+        vmax=1,
+        fmt=".2f",
+        linewidths=0.5,
+        ax=ax
+    )
+    ax.set_title("Correlation Heatmap of Numeric Variables")
+    pairs = corr.where(
+        pd.DataFrame(
+            [[i < j for j in range(len(corr.columns))]
+             for i in range(len(corr.columns))],
+            index=corr.index,
+            columns=corr.columns
+        )).stack().dropna()
+    if not pairs.empty:
+        strongest = pairs.abs().idxmax()
+        value = pairs.loc[strongest]
+        insight = (
+            f"The strongest absolute correlation is between "
+            f"{strongest[0]} and {strongest[1]} "
+            f"(r = {value:.2f}). Correlation does not establish causation."
+        )
+    else:
+        insight = "No variable pairs are available for comparison."
+else:
+    ax.text(0.5, 0.5, "Two numeric columns are required",
+            ha="center", va="center")
+    ax.set_axis_off()
+    insight = "Add at least two numeric columns to calculate correlations."
+save_chart(fig, "05_heatmap.png", insight)
+print(f"\nAll charts saved to: {output_dir.resolve()}")

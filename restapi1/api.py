@@ -1,4 +1,3 @@
-
 from fastapi import FastAPI
 app = FastAPI()
 # Temporary data storage
@@ -11,12 +10,9 @@ students = {
 @app.get("/")
 def home():
     return {"message": "Hello, World!"}
-
 @app.get("/students")
 def get_students():
     return students
-
-
 # POST - Create a new student
 @app.post("/students")
 def create_student(student: dict):
@@ -26,28 +22,20 @@ def create_student(student: dict):
         "id": new_id,
         "student": student
     }
-
-
 # PUT - Update an existing student
 @app.put("/students/{student_id}")
 def update_student(student_id: int, student: dict):
     if student_id not in students:
         return {"error": "Student not found"}
-
     students[student_id] = student
-
     return {
         "message": "Student updated successfully",
         "student": students[student_id]
     }
-
-
 # DELETE - Delete a student
 @app.delete("/students/{student_id}")
 def delete_student(student_id: int):
     if student_id not in students:
         return {"error": "Student not found"}
-
     del students[student_id]
-
     return {"message": "Student deleted successfully"}
